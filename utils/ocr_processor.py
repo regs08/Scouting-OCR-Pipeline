@@ -18,7 +18,7 @@ class OCRProcessor:
         
         # Common image formats supported by Azure Form Recognizer
         self.supported_formats = {
-            'jpeg', 'jpg', 'png', 'bmp', 'tiff', 'heic', 'heif'
+            'jpeg', 'jpg', 'png', 'bmp', 'tiff', 'heic', 'heif', 'pdf'
         }
 
     def validate_image(self, image_path: Union[str, Path]) -> tuple[bool, Optional[str]]:
@@ -108,13 +108,14 @@ class OCRProcessor:
             
         return table_data
 
-    def _save_table_data(self, table_data: list, image_path: Union[str, Path], table_index: int = 0) -> pd.DataFrame:
+    def _save_table_data(self, table_data: list, image_path: Union[str, Path], table_index: int = 0, output_dir: Union[str, Path] = "data/ocr_predictions") -> pd.DataFrame:
         """Save OCR table data as DataFrame and CSV.
         
         Args:
             table_data: 2D list containing table data
             image_path: Path to the original image file
             table_index: Index of the table in the document
+            output_dir: Directory to save the CSV file
             
         Returns:
             DataFrame containing the table data
@@ -130,12 +131,12 @@ class OCRProcessor:
         base_name = image_path.stem
         
         # Create output filename with table index if multiple tables
-        output_name = f"{base_name}_ocr_pred"
+        output_name = f"pred_{base_name}"
         if table_index > 0:
             output_name += f"_table{table_index + 1}"
         
         # Create output directory if it doesn't exist
-        output_dir = Path("data/ocr_predictions")
+        output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         
         # Save as CSV
@@ -144,12 +145,14 @@ class OCRProcessor:
         print(f"Saved OCR predictions to: {csv_path}")
         return df
 
-    def _extract_tables(self, result, image_path: Union[str, Path]) -> list:
+    def _extract_tables(self, result, image_path: Union[str, Path], save: bool = True, output_dir: Union[str, Path] = "data/ocr_predictions") -> list:
         """Extract tables from OCR results.
         
         Args:
             result: Result object from Azure Form Recognizer
             image_path: Path to the original image file
+            save: Whether to save the tables to CSV
+            output_dir: Directory to save the CSV files
             
         Returns:
             List of extracted tables as 2D lists
@@ -160,37 +163,48 @@ class OCRProcessor:
             table_data = self._create_table_data(table)
             tables.append(table_data)
             
-            # Save each table as DataFrame and CSV
-            df = self._save_table_data(table_data, image_path, idx)
-            print(f"Table {idx + 1} shape: {df.shape}")
-        
+            if save:
+                df = self._save_table_data(table_data, image_path, idx, output_dir)
+                print(image_path)
+                print(f"Table {idx + 1} shape: {df.shape}")
+
         if not tables:
             print("Warning: No tables found in the document")
         
         return tables
 
-    def process_document(self, image_path: Union[str, Path]) -> list:
-        """Process an image using OCR and return extracted table data.
+    def process_document(self, image_path: Union[str, Path], save: bool = True, output_dir: Union[str, Path] = "data/ocr_predictions") -> list:
+        """Process an image or folder of images using OCR and return extracted table data.
         
         Args:
-            image_path: Path to the image file
+            image_path: Path to the image file or folder
+            save: Whether to save the extracted tables as CSV files
+            output_dir: Directory to save the CSV files
             
         Returns:
-            List of tables extracted from the document
+            List of tables extracted from the document(s)
             
         Raises:
-            ValueError: If the image is invalid or cannot be processed
+            ValueError: If the image(s) are invalid or cannot be processed
         """
-        try:
-            # Load and validate the image
+        image_path = Path(image_path)
+        all_tables = []
+
+        if image_path.is_dir():
+            for file in image_path.iterdir():
+                if file.suffix.lower()[1:] in self.supported_formats:
+                    try:
+                        image_data = self.load_image(file)
+                        poller = self.client.begin_analyze_document("prebuilt-layout", document=image_data)
+                        result = poller.result()
+                        tables = self._extract_tables(result, file, save, output_dir)
+                        all_tables.extend(tables)
+                    except Exception as e:
+                        print(f"Error processing {file.name}: {e}")
+        else:
             image_data = self.load_image(image_path)
-            
-            # Analyze document using the prebuilt-layout model
             poller = self.client.begin_analyze_document("prebuilt-layout", document=image_data)
             result = poller.result()
-            
-            # Extract tables
-            return self._extract_tables(result, image_path)
-            
-        except Exception as e:
-            raise ValueError(f"Error processing document: {str(e)}") 
+            all_tables = self._extract_tables(result, image_path, save, output_dir)
+
+        return all_tables

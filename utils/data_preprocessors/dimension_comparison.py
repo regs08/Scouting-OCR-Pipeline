@@ -1,6 +1,6 @@
 import pandas as pd
 from typing import Tuple
-from .base import BaseProcessor
+from utils.base_processor import BaseProcessor
 
 class DimensionComparison(BaseProcessor):
     """Processor for handling static column operations and comparisons."""

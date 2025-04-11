@@ -1,4 +1,4 @@
-from .base import ColIdxBaseProcessor
+from .static_cols_base import ColIdxBaseProcessor
 
 class ArgetSinger24ColIdxProcessor(ColIdxBaseProcessor):
     """Processor for Arget Singer 24 data format."""

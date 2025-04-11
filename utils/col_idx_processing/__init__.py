@@ -1,4 +1,4 @@
-from .base import ColIdxBaseProcessor
+from .static_cols_base import ColIdxBaseProcessor
 from .arget_singer_24_processor import ArgetSinger24ColIdxProcessor
 
 
