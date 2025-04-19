@@ -1,3 +1,14 @@
+# Logs
+logs/
+*.log
+
+# Data directories
+data/
+raw/
+processed/
+checkpoints/
+flagged/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -24,17 +35,16 @@ wheels/
 venv/
 env/
 ENV/
-.env
-.venv
-env.bak/
-venv.bak/
 
-# IDE specific files
+# IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+
+# OS
 .DS_Store
+Thumbs.db
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -70,7 +80,6 @@ coverage.xml
 .hypothesis/
 
 # Logs and databases
-*.log
 *.sqlite
 *.db
 
@@ -106,7 +115,6 @@ secrets.json
 *.pem
 
 # Project specific
-data/
 *.pkl
 *.log
 

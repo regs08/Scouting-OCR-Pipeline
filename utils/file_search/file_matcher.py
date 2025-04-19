@@ -64,16 +64,3 @@ class FileMatcher:
             'non_matching_gt': non_matching_gt,
             'non_matching_pred': non_matching_pred
         }
-
-# Example usage
-working_folder = 'argetsinger'
-gt_directory = '/Users/nr466/Python Projects/Scouting_OCR_Pipeline/data/ground_truth/'
-pred_directory = '/Users/nr466/Python Projects/Scouting_OCR_Pipeline/data/ocr_predictions/'  # Update this path accordingly
-
-file_matcher = FileMatcher(working_folder, gt_directory, pred_directory)
-file_matcher.find_files()
-matched_files = file_matcher.match_files()
-unmatched_files = file_matcher.unmatched_files()
-
-print("Matched Files:", matched_files)
-print("Unmatched Files:", unmatched_files)

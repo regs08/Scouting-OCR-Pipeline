@@ -3,92 +3,47 @@ from azure.core.credentials import AzureKeyCredential
 from config.azure_config import AZURE_FORM_RECOGNIZER_ENDPOINT, AZURE_FORM_RECOGNIZER_KEY
 import os
 from pathlib import Path
-from typing import Union, Optional
-import imghdr
+from typing import Union, Optional, List
 import pandas as pd
-from PIL import Image
+from .image_handler import ImageHandler
+from .base_processor import BaseProcessor
+from .path_manager import PathManager
 
-class OCRProcessor:
-    def __init__(self):
-        """Initialize the Azure Form Recognizer client for OCR processing."""
+class OCRProcessor(BaseProcessor):
+    def __init__(self,
+                 path_manager: PathManager,
+                 session_id: str,
+                 verbose: bool = True,
+                 enable_logging: bool = True,
+                 enable_console: bool = True,
+                 log_dir: Optional[Union[str, Path]] = None,
+                 operation_name: Optional[str] = None):
+        """Initialize the OCR processor with Azure Form Recognizer client.
+        
+        Args:
+            path_manager: PathManager instance for handling file paths
+            session_id: Unique identifier for the session
+            verbose: Whether to show detailed output
+            enable_logging: Whether to enable logging to file
+            enable_console: Whether to enable console output
+            log_dir: Directory where log files will be stored
+            operation_name: Name of the current operation/checkpoint
+        """
+        super().__init__(
+            verbose=verbose,
+            enable_logging=enable_logging,
+            enable_console=enable_console,
+            log_dir=log_dir,
+            operation_name=operation_name or "ocr_processing"
+        )
+        
+        self.path_manager = path_manager
+        self.session_id = session_id
         self.client = DocumentAnalysisClient(
             endpoint=AZURE_FORM_RECOGNIZER_ENDPOINT,
             credential=AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
         )
-        
-        # Common image formats supported by Azure Form Recognizer
-        self.supported_formats = {
-            'jpeg', 'jpg', 'png', 'bmp', 'tiff', 'heic', 'heif', 'pdf'
-        }
-
-    def validate_image(self, image_path: Union[str, Path]) -> tuple[bool, Optional[str]]:
-        """Validate if the image file exists and is in a supported format for OCR.
-        
-        Args:
-            image_path: Path to the image file
-            
-        Returns:
-            Tuple of (is_valid, error_message)
-            - is_valid: True if the image is valid, False otherwise
-            - error_message: Description of the error if invalid, None if valid
-        """
-        try:
-            # Convert to Path object
-            image_path = Path(image_path)
-            
-            # Check if file exists
-            if not image_path.exists():
-                return False, f"Image file not found: {image_path}"
-            
-            # Check if it's a file (not a directory)
-            if not image_path.is_file():
-                return False, f"Path is not a file: {image_path}"
-            
-            # Check file size (Azure Form Recognizer has a 50MB limit)
-            file_size_mb = image_path.stat().st_size / (1024 * 1024)
-            if file_size_mb > 50:
-                return False, f"File size ({file_size_mb:.2f}MB) exceeds 50MB limit"
-            
-            # For PNG files, just check the extension
-            # Check if file extension is supported
-            if image_path.suffix.lower()[1:] not in self.supported_formats:
-                return False, f"Unsupported image format: {image_path.suffix}. Supported formats: {', '.join(self.supported_formats)}"
-            
-            return True, None
-            
-        except Exception as e:
-            return False, f"Error validating image: {str(e)}"
-
-    def load_image(self, image_path: Union[str, Path]) -> bytes:
-        """Load and validate an image file for OCR processing.
-        
-        Args:
-            image_path: Path to the image file
-            
-        Returns:
-            Image data as bytes
-            
-        Raises:
-            ValueError: If the image is invalid or cannot be loaded
-        """
-        # Validate the image first
-        is_valid, error_message = self.validate_image(image_path)
-        if not is_valid:
-            raise ValueError(error_message)
-        
-        try:
-            # Read the image file
-            with open(image_path, "rb") as f:
-                image_data = f.read()
-            
-            # Verify the data is not empty
-            if not image_data:
-                raise ValueError(f"Image file is empty: {image_path}")
-            
-            return image_data
-            
-        except Exception as e:
-            raise ValueError(f"Error loading image: {str(e)}")
+        self.image_handler = ImageHandler()
 
     def _create_table_data(self, table) -> list:
         """Create a 2D list representation of a table from OCR results.
@@ -108,14 +63,13 @@ class OCRProcessor:
             
         return table_data
 
-    def _save_table_data(self, table_data: list, image_path: Union[str, Path], table_index: int = 0, output_dir: Union[str, Path] = "data/ocr_predictions") -> pd.DataFrame:
+    def _save_table_data(self, table_data: list, image_path: Union[str, Path], table_index: int = 0) -> pd.DataFrame:
         """Save OCR table data as DataFrame and CSV.
         
         Args:
             table_data: 2D list containing table data
             image_path: Path to the original image file
             table_index: Index of the table in the document
-            output_dir: Directory to save the CSV file
             
         Returns:
             DataFrame containing the table data
@@ -135,76 +89,91 @@ class OCRProcessor:
         if table_index > 0:
             output_name += f"_table{table_index + 1}"
         
-        # Create output directory if it doesn't exist
-        output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Get output directory from path manager
+        output_dir = self.path_manager.get_checkpoint_path(
+            session_id=self.session_id,
+            checkpoint="ckpt1_ocr_processed"
+        )
         
         # Save as CSV
         csv_path = output_dir / f"{output_name}.csv"
         df.to_csv(csv_path, index=False)
-        print(f"Saved OCR predictions to: {csv_path}")
+        self.log_info("save_table", f"Saved OCR predictions to: {csv_path}")
         return df
 
-    def _extract_tables(self, result, image_path: Union[str, Path], save: bool = True, output_dir: Union[str, Path] = "data/ocr_predictions") -> list:
+    def _extract_tables(self, result, image_path: Union[str, Path]) -> list:
         """Extract tables from OCR results.
         
         Args:
             result: Result object from Azure Form Recognizer
             image_path: Path to the original image file
-            save: Whether to save the tables to CSV
-            output_dir: Directory to save the CSV files
             
         Returns:
             List of extracted tables as 2D lists
         """
         tables = []
         for idx, table in enumerate(result.tables):
-            print(f"\nProcessing Table {idx + 1}")
+            self.log_info("extract_tables", f"Processing Table {idx + 1}")
             table_data = self._create_table_data(table)
             tables.append(table_data)
             
-            if save:
-                df = self._save_table_data(table_data, image_path, idx, output_dir)
-                print(image_path)
-                print(f"Table {idx + 1} shape: {df.shape}")
+            df = self._save_table_data(table_data, image_path, idx)
+            self.log_info("extract_tables", f"Table {idx + 1} shape: {df.shape}")
 
         if not tables:
-            print("Warning: No tables found in the document")
+            self.log_warning("extract_tables", "No tables found in the document")
         
         return tables
 
-    def process_document(self, image_path: Union[str, Path], save: bool = True, output_dir: Union[str, Path] = "data/ocr_predictions") -> list:
-        """Process an image or folder of images using OCR and return extracted table data.
+    def process(self, session_dir: Union[str, Path]) -> None:
+        """
+        Process images in the session directory.
         
         Args:
-            image_path: Path to the image file or folder
-            save: Whether to save the extracted tables as CSV files
-            output_dir: Directory to save the CSV files
-            
-        Returns:
-            List of tables extracted from the document(s)
-            
-        Raises:
-            ValueError: If the image(s) are invalid or cannot be processed
+            session_dir: Path to the session directory
         """
-        image_path = Path(image_path)
-        all_tables = []
-
-        if image_path.is_dir():
-            for file in image_path.iterdir():
-                if file.suffix.lower()[1:] in self.supported_formats:
-                    try:
-                        image_data = self.load_image(file)
-                        poller = self.client.begin_analyze_document("prebuilt-layout", document=image_data)
-                        result = poller.result()
-                        tables = self._extract_tables(result, file, save, output_dir)
-                        all_tables.extend(tables)
-                    except Exception as e:
-                        print(f"Error processing {file.name}: {e}")
-        else:
-            image_data = self.load_image(image_path)
-            poller = self.client.begin_analyze_document("prebuilt-layout", document=image_data)
-            result = poller.result()
-            all_tables = self._extract_tables(result, image_path, save, output_dir)
-
-        return all_tables
+        session_dir = Path(session_dir)
+        
+        # Get the raw directory path from path manager
+        raw_dir = self.path_manager.get_session_paths(self.session_id)['raw']
+        
+        if not raw_dir.exists():
+            raise ValueError(f"Raw directory not found: {raw_dir}")
+            
+        # Get the output directory
+        output_dir = self.path_manager.get_checkpoint_path(self.session_id, "ckpt1_ocr_processed")
+        
+        # Process each image in the raw directory
+        for image_path in raw_dir.glob("*.png"):
+            try:
+                # Load the image
+                image = self.image_handler.load_image(image_path)
+                
+                # Process the image with Azure Form Recognizer
+                poller = self.client.begin_analyze_document("prebuilt-layout", document=image)
+                result = poller.result()
+                
+                # Extract tables from the result
+                tables = self._extract_tables(result, image_path)
+                
+                # Save each table as a separate CSV
+                for idx, table_data in enumerate(tables):
+                    # Convert table data to DataFrame
+                    df = pd.DataFrame(table_data)
+                    
+                    # Create output filename
+                    output_name = f"pred_{image_path.stem}"
+                    if idx > 0:
+                        output_name += f"_table{idx + 1}"
+                    
+                    # Save as CSV
+                    output_path = output_dir / f"{output_name}.csv"
+                    df.to_csv(output_path, index=False)
+                    
+                    self.log_info("process", f"Saved OCR predictions to: {output_path}")
+                
+                self.log_info("process", f"Processed {image_path.name}")
+                
+            except Exception as e:
+                self.log_error("process", f"Error processing {image_path.name}: {str(e)}")
+                raise

@@ -468,10 +468,8 @@ class ConfusionMatrixProcessor(BaseProcessor):
             # Use smaller font size for larger matrices
             font_size = max(6, 12 - (matrix_size // 10))
             
-            # Format annotation to reduce clutter and show scientific notation for large numbers
+            # Always use integer format for annotations
             fmt = '.0f'
-            if filtered_matrix.values.max() > 1000:
-                fmt = '.1e'
             
             ax = sns.heatmap(
                 filtered_matrix, 
@@ -505,8 +503,8 @@ class ConfusionMatrixProcessor(BaseProcessor):
             self.display_and_log("Visualization requires matplotlib and seaborn packages")
         except Exception as e:
             error_msg = f"Error in visualize_confusion_matrix: {str(e)}"
-            self.display_and_log(error_msg) 
-            
+            self.display_and_log(error_msg)
+    
     def aggregate_confusion_matrices(
         self,
         confusion_matrices: List[pd.DataFrame],
@@ -622,3 +620,104 @@ class ConfusionMatrixProcessor(BaseProcessor):
             error_msg = f"Error in aggregate_confusion_matrices: {str(e)}"
             self.display_and_log(error_msg)
             raise Exception(error_msg) 
+    
+    def process_and_analyze(
+        self,
+        gt_df: pd.DataFrame,
+        pred_df: pd.DataFrame,
+        unique_id: str,
+        output_dir: str,
+        f1_threshold: float = 80.0
+    ) -> Dict[str, Any]:
+        """
+        Process and analyze a pair of ground truth and prediction DataFrames.
+        This method handles the complete analysis pipeline including:
+        - One-vs-all analysis
+        - Multiclass confusion matrix creation
+        - Visualization
+        - Performance reporting
+        
+        Args:
+            gt_df: Ground truth DataFrame
+            pred_df: Prediction DataFrame
+            unique_id: Unique identifier for this analysis
+            output_dir: Directory to save outputs
+            f1_threshold: Threshold for identifying poor performance (default: 80%)
+            
+        Returns:
+            Dictionary containing analysis results
+        """
+        try:
+            self.display_and_log(f"\n=== One-vs-All Analysis for {unique_id} ===")
+            
+            # Check if both files exist
+            if gt_df is None or pred_df is None:
+                self.display_and_log(f"Skipping {unique_id}: One or both DataFrames are missing")
+                return None
+            
+            # Perform one-vs-all analysis
+            results = self.one_vs_all_analysis(
+                gt_df=gt_df,
+                pred_df=pred_df,
+                columns=gt_df.columns,
+                unique_id=unique_id
+            )
+            
+            # Create and save multiclass confusion matrix
+            multi_cm = self.create_multiclass_confusion_matrix(
+                gt_df=gt_df,
+                pred_df=pred_df,
+                columns=gt_df.columns
+            )
+            
+            # Save visualization of the confusion matrix
+            vis_output_path = os.path.join(output_dir, f"{unique_id}_confusion_matrix.png")
+            self.visualize_confusion_matrix(
+                confusion_matrix=multi_cm,
+                title=f"Confusion Matrix - {unique_id}",
+                save_path=vis_output_path
+            )
+            self.display_and_log(f"Confusion matrix visualization saved to: {vis_output_path}")
+            
+            # Print summary results
+            self.display_and_log("\nPer-Value Performance:")
+            pd.set_option('display.max_colwidth', None)
+            self.display_and_log(results['summary'].to_string(index=False))
+            
+            # Print problematic values (low F1 score)
+            poor_performance = results['summary'][results['summary']['F1 Score'].str.rstrip('%').astype(float) < f1_threshold]
+            if not poor_performance.empty:
+                self.display_and_log(f"\nValues with Poor Performance (F1 < {f1_threshold}%):")
+                self.display_and_log(poor_performance.to_string(index=False))
+                
+                # Print detailed confusion patterns for poor performing values
+                self.display_and_log("\nDetailed Confusion Patterns for Poor Performing Values:")
+                for _, row in poor_performance.iterrows():
+                    value = row['Value']
+                    self.display_and_log(f"\nGround Truth Value: '{value}'")
+                    self.display_and_log("When this was the correct value, it was predicted as:")
+                    confusions = results['confusion_patterns'].get(value, {})
+                    if confusions:
+                        for pred_val, count in sorted(confusions.items(), key=lambda x: x[1], reverse=True):
+                            self.display_and_log(f"  '{pred_val}': {count} times")
+                    else:
+                        self.display_and_log("  No confusion patterns found")
+                        
+                    self.display_and_log(f"\nWhen '{value}' was predicted, the actual ground truth was:")
+                    reverse_conf = results['reverse_patterns'].get(value, {})
+                    if reverse_conf:
+                        for gt_val, count in sorted(reverse_conf.items(), key=lambda x: x[1], reverse=True):
+                            self.display_and_log(f"  '{gt_val}': {count} times")
+                    else:
+                        self.display_and_log("  No incorrect predictions found")
+            
+            return {
+                'results': results,
+                'confusion_matrix': multi_cm,
+                'visualization_path': vis_output_path
+            }
+            
+        except Exception as e:
+            error_msg = f"Error in process_and_analyze for {unique_id}: {str(e)}"
+            self.display_and_log(error_msg)
+            return None 
