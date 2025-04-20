@@ -119,4 +119,11 @@ secrets.json
 *.log
 
 # Azure credentials and sensitive data
-config/azure_config.py 
+config/azure_config.py
+
+# Confusion Matrix outputs
+confusion_matrix_analysis/
+confusion_matrix_data/
+**/visualizations/
+**/data/
+**/reports/ 
