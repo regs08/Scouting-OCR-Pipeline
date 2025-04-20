@@ -135,4 +135,32 @@ class BaseSetupProcessor(BaseProcessor):
         Returns:
             Updated dictionary with processed data
         """
-        raise NotImplementedError("Subclasses must implement process") 
+        raise NotImplementedError("Subclasses must implement process")
+        
+    def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run the processor, implementing the RunnableComponent interface.
+        
+        Args:
+            input_data: Dictionary containing input data
+            
+        Returns:
+            Dictionary containing output data
+        """
+        # Call the process method
+        result = self.process(input_data)
+        
+        # Handle different types of return values
+        if result is None:
+            # If process returns None, return the input data unchanged
+            return input_data
+        elif isinstance(result, dict):
+            # If process returns a dict, merge it with the input data
+            output_data = input_data.copy()
+            output_data.update(result)
+            return output_data
+        else:
+            # If process returns a non-dict value, wrap it in a dictionary
+            output_data = input_data.copy()
+            output_data['result'] = result
+            return output_data 

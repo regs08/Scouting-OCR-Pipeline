@@ -5,18 +5,18 @@ import os
 from pathlib import Path
 from typing import Union, Optional, List, Dict, Any
 import pandas as pd
-from .image_handler import ImageHandler
-from .base_processor import BaseProcessor
-from .path_manager import PathManager
 
-class OCRProcessor(BaseProcessor):
+from utils.image_handler import ImageHandler
+from .base_session_processor import BaseSessionProcessor
+
+class OCRProcessor(BaseSessionProcessor):
     def __init__(self,
-                 path_manager: Optional[PathManager] = None,
-                 session_id: Optional[str] = None,
+                 path_manager,
+                 session_id: str,
                  verbose: bool = True,
                  enable_logging: bool = True,
                  enable_console: bool = True,
-                 log_dir: Optional[Union[str, Path]] = None,
+                 log_dir: Optional[Path] = None,
                  operation_name: Optional[str] = None):
         """Initialize the OCR processor with Azure Form Recognizer client.
         
@@ -30,6 +30,8 @@ class OCRProcessor(BaseProcessor):
             operation_name: Name of the current operation/checkpoint
         """
         super().__init__(
+            path_manager=path_manager,
+            session_id=session_id,
             verbose=verbose,
             enable_logging=enable_logging,
             enable_console=enable_console,
@@ -37,8 +39,6 @@ class OCRProcessor(BaseProcessor):
             operation_name=operation_name or "ocr_processing"
         )
         
-        self.path_manager = path_manager
-        self.session_id = session_id
         self.client = DocumentAnalysisClient(
             endpoint=AZURE_FORM_RECOGNIZER_ENDPOINT,
             credential=AzureKeyCredential(AZURE_FORM_RECOGNIZER_KEY)
@@ -95,6 +95,9 @@ class OCRProcessor(BaseProcessor):
             checkpoint="ckpt1_ocr_processed"
         )
         
+        # Ensure the output directory exists
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
         # Save as CSV
         csv_path = output_dir / f"{output_name}.csv"
         df.to_csv(csv_path, index=False)
@@ -109,49 +112,59 @@ class OCRProcessor(BaseProcessor):
             image_path: Path to the original image file
             
         Returns:
-            List of extracted tables as 2D lists
+            List of extracted tables as DataFrames
         """
         tables = []
+        dataframes = []
         for idx, table in enumerate(result.tables):
             self.log_info("extract_tables", f"Processing Table {idx + 1}")
             table_data = self._create_table_data(table)
             tables.append(table_data)
             
             df = self._save_table_data(table_data, image_path, idx)
+            dataframes.append(df)
             self.log_info("extract_tables", f"Table {idx + 1} shape: {df.shape}")
 
         if not tables:
             self.log_warning("extract_tables", "No tables found in the document")
         
-        return tables
+        return dataframes
 
-    def process(self, session_dir: Union[str, Path]) -> Dict[str, Any]:
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process images in the session directory.
+        Process images in the session directory using OCR.
         
         Args:
-            session_dir: Path to the session directory
+            input_data: Dictionary containing session data
             
         Returns:
             Dictionary with processing results
         """
+        session_dir = input_data.get('session_dir')
+        if not session_dir:
+            raise ValueError("Missing session_dir in input data")
+            
         session_dir = Path(session_dir)
         
-        # Get the raw directory path from path manager
+        # Get the raw directory path where images are stored
         raw_dir = self.path_manager.get_session_paths(self.session_id)['raw']
         
         if not raw_dir.exists():
+            self.log_error("process", f"Raw directory not found: {raw_dir}")
             raise ValueError(f"Raw directory not found: {raw_dir}")
             
         # Get the output directory
         output_dir = self.path_manager.get_checkpoint_path(self.session_id, "ckpt1_ocr_processed")
+        output_dir.mkdir(parents=True, exist_ok=True)
         
         # Track results
         processed_files = []
         
         # Process each image in the raw directory
-        for image_path in raw_dir.glob("*.png"):
+        for image_path in raw_dir.glob("**/*.png"):
             try:
+                self.log_info("process", f"Processing image: {image_path}")
+                
                 # Load the image
                 image = self.image_handler.load_image(image_path)
                 
@@ -162,73 +175,31 @@ class OCRProcessor(BaseProcessor):
                 # Extract tables from the result
                 tables = self._extract_tables(result, image_path)
                 
-                # Save each table as a separate CSV
+                # Record processing results
                 csv_files = []
-                for idx, table_data in enumerate(tables):
-                    # Convert table data to DataFrame
-                    df = pd.DataFrame(table_data)
-                    
+                for idx, df in enumerate(tables):
                     # Create output filename
                     output_name = f"pred_{image_path.stem}"
                     if idx > 0:
                         output_name += f"_table{idx + 1}"
-                    
-                    # Save as CSV
+                        
                     output_path = output_dir / f"{output_name}.csv"
-                    df.to_csv(output_path, index=False)
                     csv_files.append(output_path)
-                    
-                    self.log_info("process", f"Saved OCR predictions to: {output_path}")
                 
-                self.log_info("process", f"Processed {image_path.name}")
                 processed_files.append({
                     'image_path': str(image_path),
                     'table_count': len(tables),
                     'csv_files': [str(path) for path in csv_files]
                 })
                 
+                self.log_info("process", f"Successfully processed {image_path.name}")
+                
             except Exception as e:
                 self.log_error("process", f"Error processing {image_path.name}: {str(e)}")
-                raise
-                
+        
         # Return processing results
         return {
             'processed_images': len(processed_files),
             'processed_files': processed_files,
             'ocr_output_dir': str(output_dir)
-        }
-        
-    def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Run the OCR processor implementing the RunnableComponent interface.
-        
-        Args:
-            input_data: Dictionary containing session data
-            
-        Returns:
-            Dictionary with updated data
-        """
-        # Extract session directory from input data
-        session_dir = input_data.get('session_dir')
-        if not session_dir:
-            raise ValueError("Missing session_dir in input data")
-        
-        # If session_id or path_manager weren't provided in init, get them from input_data
-        if self.session_id is None and 'session_id' in input_data:
-            self.session_id = input_data['session_id']
-            
-        if self.path_manager is None and 'path_manager' in input_data:
-            self.path_manager = input_data['path_manager']
-            
-        # Ensure we have the necessary information
-        if self.session_id is None or self.path_manager is None:
-            raise ValueError("Missing session_id or path_manager")
-        
-        # Process the OCR and return updated data
-        ocr_result = self.process(session_dir)
-        
-        # Combine the result with the input data
-        output_data = input_data.copy()
-        output_data.update(ocr_result)
-        
-        return output_data
+        } 

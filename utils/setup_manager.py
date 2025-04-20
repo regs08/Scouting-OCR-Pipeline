@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 from datetime import datetime
 from collections import defaultdict
 
@@ -8,13 +8,9 @@ from collections import defaultdict
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from utils.base_processor import BaseProcessor
-from utils.directory_manager import DirectoryManager
 from utils.file_parser import FileParser, FileInfo
-from utils.image_handler import ImageHandler
 from utils.path_manager import PathManager
 from .base_manager import BaseManager
-from .setup_pipeline_executor import SetupPipelineExecutor
 from .setup_processors.directory_setup_processor import DirectorySetupProcessor
 from .setup_processors.data_setup_processor import DataSetupProcessor
 from .setup_processors.ground_truth_setup_processor import GroundTruthSetupProcessor
@@ -67,6 +63,99 @@ class SetupManager(BaseManager):
         self.input_dir = Path(input_dir)
         self.expected_vineyard = expected_vineyard
         
+        # Initialize the pipeline
+        self._init_pipeline()
+        
+    def _init_pipeline(self) -> None:
+        """Initialize the setup pipeline with all required components."""
+        self.add_component(
+            DirectorySetupProcessor(
+                path_manager=self.path_manager,
+                session_id=self.session_id,
+                expected_vineyard=self.expected_vineyard,
+                verbose=self.verbose,
+                enable_logging=self.enable_logging,
+                enable_console=self.enable_console,
+                log_dir=self.log_dir,
+                operation_name="directory_setup"
+            ),
+            "ckpt1_directory_setup",
+            1
+        )
+        
+        self.add_component(
+            DataSetupProcessor(
+                path_manager=self.path_manager,
+                session_id=self.session_id,
+                expected_vineyard=self.expected_vineyard,
+                verbose=self.verbose,
+                enable_logging=self.enable_logging,
+                enable_console=self.enable_console,
+                log_dir=self.log_dir,
+                operation_name="data_setup"
+            ),
+            "ckpt2_data_setup",
+            2
+        )
+        
+        self.add_component(
+            GroundTruthSetupProcessor(
+                path_manager=self.path_manager,
+                session_id=self.session_id,
+                expected_vineyard=self.expected_vineyard,
+                verbose=self.verbose,
+                enable_logging=self.enable_logging,
+                enable_console=self.enable_console,
+                log_dir=self.log_dir,
+                operation_name="ground_truth_setup"
+            ),
+            "ckpt3_ground_truth_setup",
+            3
+        )
+        
+        self.add_component(
+            FileMatchingProcessor(
+                path_manager=self.path_manager,
+                session_id=self.session_id,
+                expected_vineyard=self.expected_vineyard,
+                verbose=self.verbose,
+                enable_logging=self.enable_logging,
+                enable_console=self.enable_console,
+                log_dir=self.log_dir,
+                operation_name="file_matching"
+            ),
+            "ckpt4_file_matching",
+            4
+        )
+        
+    def run(self, input_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Run the setup pipeline.
+        
+        Args:
+            input_data: Optional input data. If None, default setup data will be used.
+            
+        Returns:
+            Dictionary containing the setup results
+        """
+        # Initialize default setup data if none provided
+        if input_data is None:
+            input_data = {
+                'input_dir': str(self.input_dir),
+                'session_id': self.session_id
+            }
+            
+        try:
+            # Run the pipeline
+            self.log_info("run", "Starting setup pipeline")
+            result = self.run_pipeline(input_data)
+            self.log_info("run", "Setup pipeline completed successfully")
+            return result
+        except Exception as e:
+            error_msg = f"Error running setup pipeline: {str(e)}"
+            self.log_error("run", error_msg)
+            raise
+            
     def setup_session(self) -> Tuple[Optional[Path], Optional[Path], List[Path]]:
         """
         Set up a new session with the current date.
@@ -75,92 +164,10 @@ class SetupManager(BaseManager):
             Tuple of (session_dir, session_logs_dir, data_files)
         """
         try:
-            # Add processors to the setup pipeline
-            self.add_processor(
-                DirectorySetupProcessor(
-                    path_manager=self.path_manager,
-                    session_id=self.session_id,
-                    expected_vineyard=self.expected_vineyard,
-                    verbose=self.verbose,
-                    enable_logging=self.enable_logging,
-                    enable_console=self.enable_console,
-                    log_dir=self.log_dir,
-                    operation_name="directory_setup"
-                ),
-                "ckpt1_directory_setup",
-                1
-            )
+            # Run the pipeline
+            setup_data = self.run()
             
-            self.add_processor(
-                DataSetupProcessor(
-                    path_manager=self.path_manager,
-                    session_id=self.session_id,
-                    expected_vineyard=self.expected_vineyard,
-                    verbose=self.verbose,
-                    enable_logging=self.enable_logging,
-                    enable_console=self.enable_console,
-                    log_dir=self.log_dir,
-                    operation_name="data_setup"
-                ),
-                "ckpt2_data_setup",
-                2
-            )
-            
-            self.add_processor(
-                GroundTruthSetupProcessor(
-                    path_manager=self.path_manager,
-                    session_id=self.session_id,
-                    expected_vineyard=self.expected_vineyard,
-                    verbose=self.verbose,
-                    enable_logging=self.enable_logging,
-                    enable_console=self.enable_console,
-                    log_dir=self.log_dir,
-                    operation_name="ground_truth_setup"
-                ),
-                "ckpt3_ground_truth_setup",
-                3
-            )
-            
-            self.add_processor(
-                FileMatchingProcessor(
-                    path_manager=self.path_manager,
-                    session_id=self.session_id,
-                    expected_vineyard=self.expected_vineyard,
-                    verbose=self.verbose,
-                    enable_logging=self.enable_logging,
-                    enable_console=self.enable_console,
-                    log_dir=self.log_dir,
-                    operation_name="file_matching"
-                ),
-                "ckpt4_file_matching",
-                4
-            )
-            
-            # Initialize setup data
-            setup_data = {
-                'input_dir': str(self.input_dir),
-                'session_id': self.session_id
-            }
-            
-            # Execute each processor in the pipeline
-            for processor_info in self.pipeline:
-                processor = processor_info['processor']
-                checkpoint_name = processor_info['checkpoint_name']
-                
-                try:
-                    # Process the data
-                    setup_data = processor.process(setup_data)
-                    
-                    # Update checkpoint status
-                    self.checkpoint_status[checkpoint_name] = "completed"
-                    self.log_info("setup_session", f"Completed checkpoint: {checkpoint_name}")
-                    
-                except Exception as e:
-                    self.checkpoint_status[checkpoint_name] = "failed"
-                    self.log_error("setup_session", f"Error in checkpoint {checkpoint_name}: {str(e)}")
-                    raise
-                    
-            # Get results
+            # Extract results
             session_dir = setup_data.get('session_dir')
             session_logs_dir = session_dir / "logs" if session_dir else None
             data_files = setup_data.get('data_files', [])

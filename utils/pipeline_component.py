@@ -1,33 +1,31 @@
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
+from abc import ABC, abstractmethod
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from utils.base_processor import BaseProcessor
-from utils.path_manager import PathManager
 from utils.runnable_component import RunnableComponent
-from utils.pipeline_component import PipelineComponent
 
-class BaseManager(PipelineComponent):
-    """Base class for managers that handle pipeline execution."""
+class PipelineComponent(BaseProcessor):
+    """
+    Base class for components that can contain and execute a pipeline of other components.
+    This serves as a common base for both processors and managers.
+    """
     
     def __init__(self,
-                 path_manager: PathManager,
-                 session_id: str,
                  verbose: bool = True,
                  enable_logging: bool = True,
                  enable_console: bool = True,
                  log_dir: Optional[Union[str, Path]] = None,
                  operation_name: Optional[str] = None):
         """
-        Initialize the base manager.
+        Initialize the pipeline component.
         
         Args:
-            path_manager: PathManager instance for handling file paths
-            session_id: Unique identifier for the session
             verbose: Whether to show detailed output
             enable_logging: Whether to enable logging to file
             enable_console: Whether to enable console output
@@ -39,11 +37,9 @@ class BaseManager(PipelineComponent):
             enable_logging=enable_logging,
             enable_console=enable_console,
             log_dir=log_dir,
-            operation_name=operation_name or "base_manager"
+            operation_name=operation_name or "pipeline_component"
         )
         
-        self.path_manager = path_manager
-        self.session_id = session_id
         self.pipeline = []
         self.checkpoint_status = {}
         
@@ -63,18 +59,6 @@ class BaseManager(PipelineComponent):
         })
         self.checkpoint_status[checkpoint_name] = "pending"
         
-    def add_processor(self, processor: BaseProcessor, checkpoint_name: str, checkpoint_number: int) -> None:
-        """
-        Add a processor to the pipeline.
-        This method is maintained for backward compatibility.
-        
-        Args:
-            processor: Processor to add
-            checkpoint_name: Name of the checkpoint
-            checkpoint_number: Number of the checkpoint
-        """
-        self.add_component(processor, checkpoint_name, checkpoint_number)
-        
     def _get_filtered_pipeline(self, start_checkpoint: Optional[int] = None, 
                              end_checkpoint: Optional[int] = None) -> List[Dict]:
         """
@@ -85,7 +69,7 @@ class BaseManager(PipelineComponent):
             end_checkpoint: Ending checkpoint number (inclusive)
             
         Returns:
-            Filtered list of processor information
+            Filtered list of component information
         """
         if start_checkpoint is None and end_checkpoint is None:
             return self.pipeline
@@ -141,6 +125,10 @@ class BaseManager(PipelineComponent):
         pipeline = self._get_filtered_pipeline(start_checkpoint, end_checkpoint)
         output_data = input_data.copy()  # Start with the input data
         
+        if not pipeline:
+            self.log_info("run_pipeline", "Pipeline is empty, nothing to execute")
+            return output_data
+            
         self.log_info("run_pipeline", f"Starting pipeline execution with {len(pipeline)} components")
         
         # Sort the pipeline by checkpoint number to ensure proper execution order
@@ -179,14 +167,65 @@ class BaseManager(PipelineComponent):
         self.log_info("run_pipeline", f"Pipeline execution completed successfully")
         return output_data
         
-    def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    def process_before_pipeline(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Run the manager's pipeline.
+        Process input data before running the pipeline.
+        This can be overridden by subclasses to perform pre-pipeline processing.
         
         Args:
-            input_data: Input data for the pipeline
+            input_data: Input data for processing
             
         Returns:
-            Output data from the pipeline
+            Processed data to be passed to the pipeline
         """
-        return self.run_pipeline(input_data) 
+        return input_data
+        
+    def process_after_pipeline(self, pipeline_output: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process pipeline output data.
+        This can be overridden by subclasses to perform post-pipeline processing.
+        
+        Args:
+            pipeline_output: Output data from the pipeline
+            
+        Returns:
+            Final processed output data
+        """
+        return pipeline_output
+        
+    def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Process the input data, optionally running a pipeline.
+        This is maintained for backward compatibility with BaseProcessor.
+        
+        Args:
+            input_data: Input data for processing
+            
+        Returns:
+            Processed output data
+        """
+        # Process data before pipeline
+        pre_data = self.process_before_pipeline(input_data)
+        
+        # If there's no pipeline, return the pre-processed data
+        if not self.pipeline:
+            return pre_data
+            
+        # Run the pipeline
+        pipeline_output = self.run_pipeline(pre_data)
+        
+        # Process data after pipeline
+        return self.process_after_pipeline(pipeline_output)
+        
+    def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run the component, executing the process method.
+        This implements the RunnableComponent interface.
+        
+        Args:
+            input_data: Input data for the component
+            
+        Returns:
+            Output data from the component
+        """
+        return self.process(input_data) 

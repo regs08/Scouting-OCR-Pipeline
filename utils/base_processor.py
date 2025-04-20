@@ -5,6 +5,8 @@ from enum import Enum, auto
 from dataclasses import dataclass
 from pathlib import Path
 
+from utils.runnable_component import RunnableComponent
+
 class LogLevel(Enum):
     """Enum for different log levels."""
     DEBUG = auto()
@@ -22,7 +24,7 @@ class LogMessage:
     data: Optional[Dict[str, Any]] = None
     timestamp: datetime = datetime.now()
 
-class BaseProcessor:
+class BaseProcessor(RunnableComponent):
     def __init__(self, 
                  verbose: bool = False, 
                  enable_logging: bool = True,
@@ -156,6 +158,19 @@ class BaseProcessor:
             operation_data: Dictionary containing summary information
         """
         self.log_info("summary", f"Operation '{self.operation_name}' completed", operation_data)
+
+    def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Execute the component's main function.
+        This should be overridden by specific implementations.
+        
+        Args:
+            input_data: Dictionary containing input data for the component
+            
+        Returns:
+            Dictionary containing output data from the component
+        """
+        raise NotImplementedError("Subclasses must implement run method")
 
 # Example usage
 if __name__ == "__main__":

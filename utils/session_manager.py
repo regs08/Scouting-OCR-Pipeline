@@ -14,8 +14,12 @@ from utils.path_manager import PathManager
 from utils.base_manager import BaseManager
 from utils.pipeline_executor import PipelineExecutor
 from utils.directory_manager import DirectoryManager
-from utils.ocr_processor import OCRProcessor
-
+from utils.session_processors.ocr_processor import OCRProcessor
+from utils.session_processors.dimension_comparison_processor import DimensionComparisonProcessor
+from utils.session_processors.confusion_matrix_processor import ConfusionMatrixSessionProcessor
+from utils.runnable_component import RunnableComponent
+from utils.session_processors.column_processor import ColumnProcessor
+from utils.col_idx_values.arget_singer_24_cols import ArgetSinger24Values
 class SessionManager(BaseManager):
     """Manages the processing of session data."""
     
@@ -47,9 +51,85 @@ class SessionManager(BaseManager):
             operation_name="session_manager"
         )
         
-    def add_processor(self, processor: BaseProcessor, checkpoint_name: str, checkpoint_number: int) -> None:
-        """Add a processor to the pipeline."""
-        super().add_processor(processor, checkpoint_name, checkpoint_number)
+        # Initialize with processors
+        self._init_pipeline()
+        
+    def _init_pipeline(self) -> None:
+        """Initialize the session pipeline with processors."""
+        # Add OCR processor as the first component
+        ocr_processor = OCRProcessor(
+            path_manager=self.path_manager,
+            session_id=self.session_id,
+            verbose=self.verbose,
+            enable_logging=self.enable_logging,
+            enable_console=self.enable_console,
+            log_dir=self.log_dir,
+            operation_name="ocr_processor"
+        )
+        
+        self.add_component(
+            ocr_processor,
+            "ckpt1_ocr_processing",
+            1
+        )
+        
+        # Add Dimension Comparison processor as the second component
+        dimension_processor = DimensionComparisonProcessor(
+            path_manager=self.path_manager,
+            session_id=self.session_id,
+            verbose=self.verbose,
+            enable_logging=self.enable_logging,
+            enable_console=self.enable_console,
+            log_dir=self.log_dir,
+            operation_name="dimension_comparison_processor"
+        )
+        
+        self.add_component(
+            dimension_processor,
+            "ckpt2_dimension_comparison",
+            2
+        )
+        
+        # Add Column Processor as the third component
+        column_processor = ColumnProcessor(
+            path_manager=self.path_manager,
+            session_id=self.session_id,
+            verbose=self.verbose,
+            enable_logging=self.enable_logging,
+            enable_console=self.enable_console,
+            log_dir=self.log_dir,
+            operation_name="column_processor"
+        )
+        
+        self.add_component(
+            column_processor,
+            "ckpt3_column_correction",
+            3
+            )
+        arg_singer_cols = ArgetSinger24Values().data_cols
+        # Add Confusion Matrix processor as the fourth component
+        confusion_matrix_processor = ConfusionMatrixSessionProcessor(
+            path_manager=self.path_manager,
+            session_id=self.session_id,
+            cols_to_process=arg_singer_cols,
+            source_checkpoint_name="ckpt3_column_correction",  # Use output from column processor
+            case_sensitive=False,
+            verbose=self.verbose,
+            enable_logging=self.enable_logging,
+            enable_console=self.enable_console,
+            log_dir=self.log_dir,
+            operation_name="confusion_matrix_processor"
+        )
+        
+        self.add_component(
+            confusion_matrix_processor,
+            "ckpt4_confusion_matrix",  # Update checkpoint number
+            4  # Update checkpoint number
+        )
+        
+    def add_component(self, component: RunnableComponent, checkpoint_name: str, checkpoint_number: int) -> None:
+        """Add a component to the pipeline."""
+        super().add_component(component, checkpoint_name, checkpoint_number)
         
     def _get_previous_checkpoint_data(self, checkpoint_number: int) -> Dict[str, pd.DataFrame]:
         """
@@ -123,6 +203,58 @@ class SessionManager(BaseManager):
             
         return data
         
+    def prepare_pipeline_data(self) -> Dict[str, Any]:
+        """
+        Prepare the initial data for the pipeline.
+        
+        Returns:
+            Dictionary with initial pipeline data
+        """
+        # Get session directory from path manager
+        session_paths = self.path_manager.get_session_paths(self.session_id)
+        session_dir = self.path_manager.base_dir / self.session_id
+            
+        if not session_dir.exists():
+            self.log_error("prepare_pipeline_data", f"Session directory not found: {session_dir}")
+            raise FileNotFoundError(f"Session directory not found: {session_dir}")
+        
+        return {
+            'session_id': self.session_id,
+            'session_dir': session_dir,
+            'session_paths': session_paths,
+            'path_manager': self.path_manager
+        }
+        
+    def run(self, input_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Run the session processing pipeline.
+        
+        Args:
+            input_data: Optional input data. If None, data will be prepared automatically.
+            
+        Returns:
+            Dictionary with the processing results and checkpoint statuses
+        """
+        if input_data is None:
+            input_data = self.prepare_pipeline_data()
+            
+        try:
+            # Run the pipeline
+            self.log_info("run", "Starting session processing pipeline")
+            result = self.run_pipeline(input_data)
+            
+            # Add checkpoint statuses to the result
+            result['checkpoint_status'] = self.checkpoint_status
+            
+            self.log_info("run", "Session processing pipeline completed successfully")
+            return result
+        except Exception as e:
+            error_msg = f"Error running session processing pipeline: {str(e)}"
+            self.log_error("run", error_msg)
+            
+            # Still return checkpoint statuses even on error
+            return {'checkpoint_status': self.checkpoint_status}
+            
     def process_session(self) -> Dict[str, str]:
         """
         Process the session data.
@@ -131,54 +263,9 @@ class SessionManager(BaseManager):
             Dictionary mapping checkpoint names to their status
         """
         try:
-            # Get session directory from path manager
-            session_paths = self.path_manager.get_session_paths(self.session_id)
-            session_dir = self.path_manager.base_dir / self.session_id
-            
-            if not session_dir.exists():
-                self.log_error("process_session", f"Session directory not found: {session_dir}")
-                return self.checkpoint_status
-            
-            # Execute each processor in the pipeline
-            for processor_info in self.pipeline:
-                processor = processor_info['processor']
-                checkpoint_name = processor_info['checkpoint_name']
-                checkpoint_number = processor_info['checkpoint_number']
-                
-                try:
-                    # Get data from previous checkpoint
-                    prev_checkpoint_data = self._get_previous_checkpoint_data(checkpoint_number)
-                    
-                    # Process the data
-                    if isinstance(processor, OCRProcessor):
-                        # OCR processor needs the session directory
-                        processor.process(session_dir)
-                    else:
-                        # Other processors need the previous checkpoint data
-                        if not prev_checkpoint_data:
-                            self.log_warning("process_session", 
-                                           f"No previous checkpoint data available for {checkpoint_name}")
-                            self.checkpoint_status[checkpoint_name] = "skipped"
-                            continue
-                            
-                        # Combine previous checkpoint data with session data
-                        input_data = {
-                            'session_id': self.session_id,
-                            'prev_checkpoint_data': prev_checkpoint_data
-                        }
-                        processor.process(input_data)
-                    
-                    # Update checkpoint status
-                    self.checkpoint_status[checkpoint_name] = "completed"
-                    self.log_info("process_session", f"Completed checkpoint: {checkpoint_name}")
-                    
-                except Exception as e:
-                    self.checkpoint_status[checkpoint_name] = "failed"
-                    self.log_error("process_session", f"Error in checkpoint {checkpoint_name}: {str(e)}")
-                    # Don't raise the exception - continue with next processor
-                    continue
-                
-            return self.checkpoint_status
+            # Run the pipeline
+            result = self.run()
+            return result.get('checkpoint_status', self.checkpoint_status)
             
         except Exception as e:
             self.log_error("process_session", f"Error processing session: {str(e)}")
