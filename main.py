@@ -13,7 +13,7 @@ from utils.application_manager import ApplicationManager
 
 def main():
     # Configuration
-    input_dir = "/Users/cole/PycharmProjects/Scouting-OCR-Pipeline/input"
+    input_dir = str(Path.cwd() / "input")
     vineyard = "arget_singer"
     
     # Create application manager which internally sets up the setup and session managers

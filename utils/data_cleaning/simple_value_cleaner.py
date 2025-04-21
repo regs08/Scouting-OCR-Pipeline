@@ -47,7 +47,7 @@ class SimpleValueCleaner(BaseProcessor):
             # Filter to only include columns that actually exist in the DataFrame
             columns = [col for col in columns if col in cleaned_df.columns]
         
-        self.display_and_log(f"Cleaning values in {len(columns)} columns")
+        self.log_info("clean_data", f"Cleaning values in {len(columns)} columns")
         
         # Track replacements for reporting
         replacements = {
@@ -68,11 +68,62 @@ class SimpleValueCleaner(BaseProcessor):
             cleaned_df.loc[selected_mask, col] = "0"
         
         # Log summary of replacements
-        self.display_and_log("Value cleaning completed", {
+        self.log_info("clean_data", "Value cleaning completed", {
             "Empty values replaced": replacements["empty_to_zero"],
             "':selected:' values replaced": replacements["selected_to_zero"],
             "Total replacements": sum(replacements.values())
         })
+        
+        return cleaned_df
+        
+    def replace_values(
+        self,
+        df: pd.DataFrame,
+        replace_dict: dict,
+        columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
+        """
+        Replace specific values in the DataFrame with provided replacements.
+        
+        Args:
+            df: DataFrame to clean
+            replace_dict: Dictionary mapping values to replace with their replacements
+            columns: List of columns to process. If None, processes all columns.
+            
+        Returns:
+            Cleaned DataFrame with replaced values
+        """
+        # Make a copy to avoid modifying the original
+        cleaned_df = df.copy()
+        
+        # If no columns specified, use all columns
+        if columns is None:
+            columns = cleaned_df.columns.tolist()
+        else:
+            # Filter to only include columns that actually exist in the DataFrame
+            columns = [col for col in columns if col in cleaned_df.columns]
+        
+        self.log_info("replace_values", f"Replacing values in {len(columns)} columns")
+        
+        # Track replacements for reporting
+        replacements = {str(old_val): 0 for old_val in replace_dict.keys()}
+        
+        # Process each column
+        for col in columns:
+            for old_val, new_val in replace_dict.items():
+                # Create mask for values to replace
+                replace_mask = cleaned_df[col].astype(str) == str(old_val)
+                replacements[str(old_val)] += replace_mask.sum()
+                
+                # Replace the values
+                cleaned_df.loc[replace_mask, col] = new_val
+        
+        # Log summary of replacements
+        replacement_details = {f"'{old}' → '{replace_dict[old]}'": count 
+                              for old, count in replacements.items() if count > 0}
+        replacement_details["Total replacements"] = sum(replacements.values())
+        
+        self.log_info("replace_values", "Value replacement completed", replacement_details)
         
         return cleaned_df
         
@@ -176,10 +227,10 @@ class SimpleValueCleaner(BaseProcessor):
             # Save if path provided
             if save_path:
                 plt.savefig(save_path, dpi=150, bbox_inches='tight')
-                self.display_and_log(f"Comparison visualization saved to: {save_path}")
+                self.log_info("generate_comparison", f"Comparison visualization saved to: {save_path}")
             
             plt.close()
             
         except Exception as e:
-            self.display_and_log(f"Error creating comparison visualization: {str(e)}")
+            self.log_error("generate_comparison", f"Error creating comparison visualization: {str(e)}")
             return None 

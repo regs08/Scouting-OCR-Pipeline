@@ -48,7 +48,7 @@ class BasicCleaner(BaseProcessor):
         # Filter to only include columns that actually exist in the DataFrame
         numeric_cols = [col for col in numeric_cols if col in cleaned_df.columns]
         
-        self.display_and_log(f"Cleaning zeros in {len(numeric_cols)} columns")
+        self.log_info("clean_zeros", f"Cleaning zeros in {len(numeric_cols)} columns")
         
         # Track replacements for reporting
         replacements = {
@@ -69,7 +69,7 @@ class BasicCleaner(BaseProcessor):
             cleaned_df.loc[selected_mask, col] = "0"
         
         # Log summary of replacements
-        self.display_and_log("Zero cleaning completed", {
+        self.log_info("clean_zeros", "Zero cleaning completed", {
             "Empty values replaced": replacements["empty_to_zero"],
             "':selected:' values replaced": replacements["selected_to_zero"],
             "Total replacements": sum(replacements.values())
@@ -104,7 +104,7 @@ class BasicCleaner(BaseProcessor):
             # Filter to only include columns that actually exist in the DataFrame
             columns = [col for col in columns if col in cleaned_df.columns]
         
-        self.display_and_log(f"Replacing values in {len(columns)} columns")
+        self.log_info("replace_values", f"Replacing values in {len(columns)} columns")
         
         # Track replacements for reporting
         replacements = {str(old_val): 0 for old_val in replace_dict.keys()}
@@ -124,6 +124,6 @@ class BasicCleaner(BaseProcessor):
                               for old, count in replacements.items() if count > 0}
         replacement_details["Total replacements"] = sum(replacements.values())
         
-        self.display_and_log("Value replacement completed", replacement_details)
+        self.log_info("replace_values", "Value replacement completed", replacement_details)
         
         return cleaned_df 
