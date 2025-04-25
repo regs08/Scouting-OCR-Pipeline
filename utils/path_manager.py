@@ -10,7 +10,7 @@ sys.path.append(str(project_root))
 class PathManager:
     """Manages file paths for the OCR pipeline."""
     
-    def __init__(self, vineyard: str, batch: str):
+    def __init__(self, expected_site_code: str, batch: str):
         """
         Initialize the path manager.
         
@@ -18,9 +18,9 @@ class PathManager:
             vineyard: Name of the vineyard
             batch: Batch identifier (date)
         """
-        self.vineyard = Path(vineyard)
+        self.expected_site_code = Path(expected_site_code)
         self.batch = str(batch)
-        self.base_dir = self.vineyard / self.batch
+        self.base_dir = self.expected_site_code / self.batch
         
     def get_session_paths(self, session_id: str) -> Dict[str, Path]:
         """

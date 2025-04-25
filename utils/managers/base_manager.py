@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any
+from datetime import datetime
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
@@ -10,29 +11,30 @@ from utils.base_processor import BaseProcessor
 from utils.path_manager import PathManager
 from utils.runnable_component import RunnableComponent
 from utils.pipeline_component import PipelineComponent
+from utils.component_config import RunnableComponentConfig
 
 class BaseManager(PipelineComponent):
     """Base class for managers that handle pipeline execution."""
     
     def __init__(self,
-                 path_manager: PathManager,
-                 session_id: str,
                  verbose: bool = True,
                  enable_logging: bool = True,
                  enable_console: bool = True,
+                 component_configs: List[RunnableComponentConfig] = None,
                  log_dir: Optional[Union[str, Path]] = None,
-                 operation_name: Optional[str] = None):
+                 operation_name: Optional[str] = None,
+                 **kwargs: Any):
         """
         Initialize the base manager.
         
         Args:
-            path_manager: PathManager instance for handling file paths
-            session_id: Unique identifier for the session
             verbose: Whether to show detailed output
             enable_logging: Whether to enable logging to file
             enable_console: Whether to enable console output
+            component_configs: List of component configurations to initialize
             log_dir: Directory where log files will be stored
             operation_name: Name of the current operation/checkpoint
+            **kwargs: Additional keyword arguments for components, must include path_manager
         """
         super().__init__(
             verbose=verbose,
@@ -42,10 +44,57 @@ class BaseManager(PipelineComponent):
             operation_name=operation_name or "base_manager"
         )
         
-        self.path_manager = path_manager
-        self.session_id = session_id
+        if 'path_manager' not in kwargs:
+            raise ValueError("path_manager must be provided in kwargs")
+            
+        self.path_manager = kwargs['path_manager']
+        self.session_id = kwargs.get('session_id', datetime.now().strftime("%Y%m%d_%H%M%S"))
         self.pipeline = []
         self.checkpoint_status = {}
+        self.component_kwargs = kwargs
+        
+        # Initialize components if provided
+        if component_configs:
+            self._init_components(component_configs)
+            
+    def _init_components(self, component_configs: List[RunnableComponentConfig]) -> None:
+        """
+        Initialize components from their configurations.
+        
+        Args:
+            component_configs: List of component configurations
+        """
+        # Sort configs by checkpoint number
+        sorted_configs = sorted(component_configs, key=lambda x: x.checkpoint_number)
+        
+        for config in sorted_configs:
+            # Log component initialization
+            self.log_info(
+                "_init_components",
+                f"Initializing {config.component_class.__name__} at checkpoint {config.checkpoint_number}"
+                + (f": {config.description}" if config.description else "")
+            )
+            
+            # Initialize the component using the stored kwargs
+            try:
+                # Pass through the kwargs from ApplicationManager
+                init_kwargs = {
+                    **self.component_kwargs,  # All kwargs from ApplicationManager
+                    'component_configs': config.component_configs  # Add nested configs
+                }
+                
+                component = config.component_class(**init_kwargs)
+                self.add_component(
+                    component,
+                    config.checkpoint_name,
+                    config.checkpoint_number
+                )
+            except Exception as e:
+                self.log_error(
+                    "_init_components",
+                    f"Failed to initialize {config.component_class.__name__}: {str(e)}"
+                )
+                raise
         
     def add_component(self, component: RunnableComponent, checkpoint_name: str, checkpoint_number: int) -> None:
         """
@@ -179,14 +228,39 @@ class BaseManager(PipelineComponent):
         self.log_info("run_pipeline", f"Pipeline execution completed successfully")
         return output_data
         
-    def run(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+    def run(self, input_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Run the manager's pipeline.
         
         Args:
-            input_data: Input data for the pipeline
+            input_data: Optional input data. If None, will create from manager's state.
             
         Returns:
-            Output data from the pipeline
+            Dict containing:
+                - checkpoint_status: Status of each checkpoint
+                - output_data: Final output data from pipeline
         """
-        return self.run_pipeline(input_data) 
+        # If no input data provided, create from manager's state
+        if input_data is None:
+            input_data = {
+                **self.component_kwargs,  # Include all kwargs passed during initialization
+                'path_manager': self.path_manager,
+                'session_id': self.session_id
+            }
+        
+        try:
+            # Run the pipeline
+            output_data = self.run_pipeline(input_data)
+            
+            # Return both checkpoint status and output data
+            return {
+                'checkpoint_status': self.checkpoint_status,
+                'output_data': output_data
+            }
+            
+        except Exception as e:
+            self.log_error("run", f"Pipeline execution failed: {str(e)}")
+            return {
+                'checkpoint_status': self.checkpoint_status,
+                'error': str(e)
+            } 

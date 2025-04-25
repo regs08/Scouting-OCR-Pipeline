@@ -68,7 +68,7 @@ def setup_test_directory(path_manager: PathManager, session_id: str) -> None:
 def main():
     # Initialize path manager with test parameters
     path_manager = PathManager(
-        vineyard="arget_singer",
+        expected_site_code="arget_singer",
         batch="20250421"
     )
     

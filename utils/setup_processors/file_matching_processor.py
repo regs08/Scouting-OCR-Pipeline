@@ -9,7 +9,7 @@ class FileMatchingProcessor(BaseSetupProcessor):
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rp_pattern = r'R\d+P\d+_R\d+P\d+'  # Pattern to match R#P#_R#P# sequences
+        self.rp_pattern = r'R\d+T\d+_R\d+T\d+'  # Pattern to match R#T#_R#T# sequences
         
     def _extract_sequence(self, filename: str) -> Optional[str]:
         """

@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Union, Any
 from pathlib import Path
 
-from utils.base_manager import BaseManager
+from utils.managers.base_manager import BaseManager
 from utils.path_manager import PathManager
 from utils.data_cleaning.basic_cleaner import BasicCleaner
 from utils.data_cleaning.simple_value_cleaner import SimpleValueCleaner

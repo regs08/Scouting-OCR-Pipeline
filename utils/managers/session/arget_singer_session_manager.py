@@ -11,7 +11,7 @@ sys.path.append(str(project_root))
 
 from utils.base_processor import BaseProcessor
 from utils.path_manager import PathManager
-from utils.base_manager import BaseManager
+from utils.managers.base_manager import BaseManager
 from utils.pipeline_executor import PipelineExecutor
 from utils.directory_manager import DirectoryManager
 from utils.session_processors.ocr_processor import OCRProcessor
@@ -19,8 +19,8 @@ from utils.session_processors.dimension_comparison_processor import DimensionCom
 from utils.session_processors.confusion_matrix_processor import ConfusionMatrixSessionProcessor
 from utils.runnable_component import RunnableComponent
 from utils.session_processors.column_processor import ColumnProcessor
-from utils.col_idx_values.arget_singer_24_cols import ArgetSinger24Values
-class SessionManager(BaseManager):
+from utils.site_data.arget_singer_24 import ArgetSinger24SiteData
+class ArgetSingerSessionManager(BaseManager):
     """Manages the processing of session data."""
     
     def __init__(self,
@@ -106,7 +106,7 @@ class SessionManager(BaseManager):
             "ckpt3_column_correction",
             3
             )
-        arg_singer_cols = ArgetSinger24Values().data_cols
+        arg_singer_cols = ArgetSinger24SiteData().data_cols
         # Add Confusion Matrix processor as the fourth component
         confusion_matrix_processor = ConfusionMatrixSessionProcessor(
             path_manager=self.path_manager,
