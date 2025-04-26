@@ -1,12 +1,16 @@
 import pandas as pd
 from typing import List, Optional
-from utils.base_processor import BaseProcessor
+from utils.loggable_component import LoggableComponent
+from utils.component_type import ComponentType
 
-class SimpleValueCleaner(BaseProcessor):
+class SimpleValueCleaner(LoggableComponent):
     """
     A simple data cleaner that replaces empty values and ':selected:' with 0.
     Useful for standardizing values in OCR-processed data.
     """
+    
+    # Define component type
+    component_type = ComponentType.CLEANER
     
     def __init__(
         self, 

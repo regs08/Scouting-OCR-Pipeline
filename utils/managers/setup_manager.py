@@ -2,23 +2,27 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Type
 from datetime import datetime
+import os
 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from utils.path_manager import PathManager
-from .base_manager import BaseManager
-from utils.component_config import RunnableComponentConfig
-from site_data import SiteDataBase
-class SetupManager(BaseManager):
-    """Manages the setup of session directories and data copying."""
+from utils.pipeline_component import PipelineComponent
+from utils.runnable_component_config import RunnableComponentConfig
+from utils.site_data.site_data_base import SiteDataBase, FileAnalysisResult
+
+class SetupManager(PipelineComponent):
+    """
+    Manages the setup of session directories and data copying.
+    Handles initialization and validation of the pipeline environment.
+    """
     
     def __init__(self,
-                 input_dir: Union[str, Path],
-                 site_data: Type[SiteDataBase],
-                 component_configs: List[RunnableComponentConfig]=None,
-                 path_manager: PathManager = None,  # Make path_manager optional since it comes from parent
+                 *,  # Force keyword arguments
+                 component_configs: Optional[List[RunnableComponentConfig]] = None,
+                 path_manager: Optional[PathManager] = None,
                  verbose: bool = True,
                  enable_logging: bool = True,
                  enable_console: bool = True,
@@ -28,49 +32,70 @@ class SetupManager(BaseManager):
         Initialize the setup manager.
         
         Args:
-            input_dir: Directory containing input data and ground truth
-            site_data: Site data configuration class
             component_configs: List of components to initialize
-            path_manager: PathManager instance (passed from parent manager)
+            path_manager: PathManager instance for managing file paths
             verbose: Whether to show detailed output
             enable_logging: Whether to enable logging to file
             enable_console: Whether to enable console output
             log_dir: Directory where log files will be stored
-            **kwargs: Additional arguments passed to parent class
+            **kwargs: Additional arguments for pipeline configuration
         """
-            
-        # Create session ID
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Create session ID if not provided
+        session_id = kwargs.get('session_id', datetime.now().strftime("%Y%m%d_%H%M%S"))
         
-        self.site_data = site_data
-        
-        # Initialize BaseManager with configuration
+        # Initialize pipeline component with logging
         super().__init__(
-            path_manager=path_manager,  # Pass the path_manager from parent
-            session_id=session_id,
             verbose=verbose,
             enable_logging=enable_logging,
             enable_console=enable_console,
             log_dir=log_dir,
-            operation_name="setup_manager",
             component_configs=component_configs,
-            input_dir=str(input_dir),
             **kwargs
         )
         
-    def setup_processing_paths(self) -> None:
-        """
-        Set up additional paths needed for processing.
-        These changes will be reflected in the shared PathManager instance.
-        """
-        # Example of how SetupManager can add/modify paths
-        processing_dir = Path(self.component_kwargs['input_dir']) / "processing"
-        processing_dir.mkdir(exist_ok=True)
+        self.path_manager = path_manager
         
-        # Since we're using the shared PathManager instance, these updates
-        # will be visible to all components that use the same PathManager
-        self.path_manager.processing_dir = processing_dir
-        self.log_info("setup_processing_paths", f"Added processing directory: {processing_dir}")
+        
+    def process_before_pipeline(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Prepare setup manager with input data from parent. Do not extract dates or validate files here.
+        """
+        self.input_dir = Path(input_data['input_dir'])
+        self.site_data = input_data['site_data']
 
+        # Initialize path_manager if needed (using current date or a default)
+        if not self.path_manager:
+            site_code = getattr(self.site_data, 'site_code', 'default')
+            batch = self.site_data.collection_date 
+            self.path_manager = PathManager(
+                expected_site_code=site_code,
+                batch=batch
+            )
 
-# Remove SessionManager class from here 
+        self.log_info("process_before_pipeline", "Setup manager configured", {
+            "input_dir": str(self.input_dir),
+            "site_data": self.site_data.__class__.__name__,
+            "path_manager.batch": self.path_manager.batch
+        })
+
+        if 'path_manager' not in input_data:
+            input_data['path_manager'] = self.path_manager
+        # Pass gt_dir through if present
+        if 'gt_dir' in input_data:
+            input_data['gt_dir'] = input_data['gt_dir']
+
+        return input_data
+
+    def process_after_pipeline(self, pipeline_output: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Optionally add session info and log completion, but do not block or check for specific outputs.
+        """
+        self.log_info("process_after_pipeline", "Setup pipeline completed", {
+            "checkpoint_status": pipeline_output.get('checkpoint_status', {})
+        })
+        return {
+            **pipeline_output,
+            'setup_completed': True,
+            'session_id': self.session_id,
+            'path_manager': self.path_manager
+        }

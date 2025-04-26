@@ -1,4 +1,4 @@
-from typing import NamedTuple, Type, List, Optional
+from typing import NamedTuple, Type, List, Optional, Dict, Any
 from utils.runnable_component import RunnableComponent
 
 class RunnableComponentConfig(NamedTuple):
@@ -21,7 +21,8 @@ class RunnableComponentConfig(NamedTuple):
             component_class=OCRProcessor,
             checkpoint_name="ocr",
             checkpoint_number=1,
-            description="Extract text from images"
+            description="Extract text from images",
+            metadata={"supported_formats": ["png", "jpg"]}
         )
         
         # In pipeline configuration with sub-components
@@ -44,5 +45,6 @@ class RunnableComponentConfig(NamedTuple):
     checkpoint_name: str
     checkpoint_number: int
     description: str = ""  # Optional description of what this component does
+    metadata: Dict[str, Any] = {}  # Additional metadata for validation/configuration
     component_configs: Optional[List['RunnableComponentConfig']] = None  # Optional list of sub-components
     

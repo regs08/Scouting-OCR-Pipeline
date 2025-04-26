@@ -2,24 +2,25 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional, Union, Any, Type
 from datetime import datetime
-
+import os 
 # Add the project root to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from utils.managers.base_manager import BaseManager
-from utils.path_manager import PathManager
-from utils.managers.setup_manager import SetupManager
+from utils.pipeline_component import PipelineComponent
 from utils.site_data.site_data_base import SiteDataBase
-from utils.component_config import RunnableComponentConfig
+from utils.runnable_component_config import RunnableComponentConfig
 
-class ApplicationManager(BaseManager):
-    """Manages the entire application pipeline from setup to processing."""
+class ApplicationManager(PipelineComponent):
+    """
+    High-level manager that coordinates setup and session management.
+    Orchestrates the complete application pipeline from setup to processing.
+    """
     
     def __init__(self,
                  input_dir: Union[str, Path],
                  site_data: Type[SiteDataBase],
-                 component_configs: List[RunnableComponentConfig] = None,
+                 component_configs: Optional[List[RunnableComponentConfig]] = None,
                  verbose: bool = True,
                  enable_logging: bool = True,
                  enable_console: bool = True,
@@ -31,54 +32,68 @@ class ApplicationManager(BaseManager):
         Args:
             input_dir: Directory containing input data and ground truth
             site_data: Site data configuration class
-            component_configs: List of RunnableComponentConfig objects defining the pipeline components
-                           Components will be initialized and added in order of checkpoint_number
+            component_configs: List of manager components (setup, session, etc.)
             verbose: Whether to show detailed output
             enable_logging: Whether to enable logging to file
             enable_console: Whether to enable console output
             log_dir: Directory where log files will be stored
-            **kwargs: Additional keyword arguments to pass to components
+            **kwargs: Additional keyword arguments for components
         """
         self.input_dir = Path(input_dir)
         self.site_data = site_data
         
-        # Initialize single PathManager instance for all components
-        self.path_manager = PathManager(
-            expected_site_code=self.site_data.site_code,
-            batch=datetime.now().strftime("%Y%m%d")
-        )
-        
         # Create session ID
-        session_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.session_id = kwargs.get('session_id', datetime.now().strftime("%Y%m%d_%H%M%S"))
         
-        # Prepare all kwargs that will flow down to components
-        component_kwargs = {
-            'input_dir': str(self.input_dir),
-            'site_data': site_data,
-            'path_manager': self.path_manager,
-            **kwargs  # Add any additional kwargs passed to ApplicationManager
-        }
-        
-        # Initialize BaseManager with configuration
+        # Initialize pipeline component
         super().__init__(
             verbose=verbose,
             enable_logging=enable_logging,
             enable_console=enable_console,
-            component_configs=component_configs,
             log_dir=log_dir,
             operation_name="application_manager",
-            **component_kwargs  # Pass all kwargs down to components, including path_manager
+            component_configs=component_configs,
+            session_id=self.session_id,
+            **kwargs
         )
         
-    def update_paths(self, new_paths: Dict[str, Path]) -> None:
+        # Path manager will be set by the setup manager after it analyzes files and extracts dates
+        self.path_manager = None
+        
+        # Log initialization
+        self.log_info("__init__", "Application manager initialized", {
+            "input_dir": str(self.input_dir),
+            "site_data": self.site_data.site_name,
+            "session_id": self.session_id
+        })
+
+    def process_before_pipeline(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Update paths in the PathManager. Changes will be reflected in all components.
+        Prepare the application context for all pipeline components.
         
         Args:
-            new_paths: Dictionary of new paths to add/update
+            input_data: Initial input data
+            
+        Returns:
+            Dict with application context
         """
-        # Since self.path_manager is shared across all components,
-        # any updates here will be visible to all components
-        for key, path in new_paths.items():
-            setattr(self.path_manager, key, path)
-            self.log_info("update_paths", f"Updated path '{key}' to {path}")
+        return {
+            **input_data,
+            'input_dir': str(self.input_dir),
+            'site_data': self.site_data,
+            'session_id': self.session_id,
+            'gt_dir': os.path.join(self.input_dir, 'ground_truth')
+        }
+
+    def process_after_pipeline(self, pipeline_output: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Optionally add session info and log completion, but do not block or check for specific outputs.
+        """
+        self.log_info("process_after_pipeline", "Pipeline completed", {
+            "checkpoint_status": pipeline_output.get('checkpoint_status', {})
+        })
+        return {
+            **pipeline_output,
+            'session_id': self.session_id,
+            'completed_at': datetime.now().isoformat()
+        }

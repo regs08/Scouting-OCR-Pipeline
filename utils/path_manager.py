@@ -24,7 +24,7 @@ class PathManager:
         
     def get_session_paths(self, session_id: str) -> Dict[str, Path]:
         """
-        Returns all relevant paths for a session.
+        Returns all relevant paths for a session, including ground_truth.
         
         Args:
             session_id: Unique identifier for the session (timestamp)
@@ -32,14 +32,16 @@ class PathManager:
         Returns:
             Dictionary of path types to their corresponding Path objects
         """
-        # Session-specific paths are under the batch directory
         session_base = self.base_dir / session_id
+        ground_truth_dir = session_base / "ground_truth"
+        ground_truth_dir.mkdir(parents=True, exist_ok=True)
         return {
-            'raw': session_base / "raw" / "original" / "_by_id",
+            'raw': session_base / "raw",
             'processed': session_base / "processed",
             'checkpoints': session_base / "processed" / "checkpoints",
             'flagged': session_base / "flagged",
-            'logs': session_base / "logs"
+            'logs': session_base / "logs",
+            'ground_truth': ground_truth_dir
         }
         
     def get_checkpoint_path(self, session_id: str, checkpoint: str) -> Path:
@@ -161,4 +163,28 @@ class PathManager:
         """
         flagged_dir = self.base_dir / session_id / "flagged"
         flagged_dir.mkdir(parents=True, exist_ok=True)
-        return flagged_dir 
+        return flagged_dir
+
+    def validate_setup(self) -> bool:
+        """
+        Validate that the basic directory structure exists.
+        
+        Returns:
+            bool: True if setup is valid
+        """
+        # Check if base directory exists
+        if not self.base_dir.exists():
+            return False
+            
+        # Basic setup validation - check if essential directories exist
+        essential_dirs = [
+            self.base_dir,
+            self.base_dir / "raw",
+            self.base_dir / "processed"
+        ]
+        
+        for directory in essential_dirs:
+            if not directory.exists():
+                return False
+                
+        return True 

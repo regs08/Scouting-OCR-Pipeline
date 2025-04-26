@@ -9,7 +9,7 @@ from PIL import Image
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-from utils.base_processor import BaseProcessor
+from utils.loggable_component import BaseProcessor
 
 class ImageHandler(BaseProcessor):
     def __init__(self, 

@@ -1,6 +1,6 @@
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-from utils.base_processor import BaseProcessor
+from utils.loggable_component import BaseProcessor
 
 class BaseSessionProcessor(BaseProcessor):
     """Base class for session processors that process data during a session."""

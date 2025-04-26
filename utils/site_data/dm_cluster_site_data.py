@@ -1,11 +1,17 @@
 from .site_data_base import SiteDataBase
-from typing import List
+from typing import List, Optional
+from datetime import datetime
 
 class DMClusterSiteData(SiteDataBase):
     """Site data configuration for DM Cluster format."""
     
-    def __init__(self):
-        """Initialize with fixed column definitions for DM Cluster format."""
+    def __init__(self, collection_date: Optional[str] = None):
+        """
+        Initialize with fixed column definitions for DM Cluster format.
+        
+        Args:
+            collection_date: Collection date in YYYYMMDD format. If None, current date is used.
+        """
         data_cols = [
             'C1', 'C2', 'C3', 'C4', 'C5', 
             'C6', 'C7', 'C8', 'C9', 'C10', 
@@ -21,7 +27,8 @@ class DMClusterSiteData(SiteDataBase):
             site_name="dm_cluster",
             site_code="DMC",
             location_pattern=r'R(\d+)T(\d+)',  # Standard R#T# pattern for replicate and treatment
-            supported_extensions=['.png', '.jpg', '.jpeg', '.pdf']
+            supported_extensions=['.png', '.jpg', '.jpeg', '.pdf'],
+            collection_date=collection_date
         )
     
     def get_data_column_indices(self) -> List[int]:
