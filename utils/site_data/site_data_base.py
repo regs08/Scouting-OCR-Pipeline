@@ -58,6 +58,7 @@ class SiteDataBase:
         self.index_cols = index_cols
         self.site_name = site_name
         self.site_code = site_code
+        self.cols = self.index_cols + self.data_cols
         self.supported_extensions = supported_extensions or ['.png', '.jpg', '.jpeg', '.pdf', '.tiff', '.tif']
         
         # Validate and store collection date

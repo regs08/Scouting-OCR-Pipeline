@@ -20,7 +20,7 @@ class RawFileValidationComponent(PipelineComponent):
                  verbose: bool = True,
                  enable_logging: bool = True,
                  enable_console: bool = True,
-                 recursive: bool = True,
+                 recursive: bool = False,
                  stop_on_error: bool = False,
                  operation_name: str = "file_validation",
                  **kwargs: Any):

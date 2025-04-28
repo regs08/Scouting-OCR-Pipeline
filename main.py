@@ -10,71 +10,22 @@ project_root = Path(__file__).parent
 sys.path.append(str(project_root))
 
 from utils.managers.application_manager import ApplicationManager
-from utils.runnable_component_config import RunnableComponentConfig
-from utils.managers.setup_manager import SetupManager
-from utils.components.directory_creator import DirectoryCreator
 from utils.site_data.dm_leaf_site_data import DMLeafSiteData
-from utils.components.raw_file_validation_component import RawFileValidationComponent
-from utils.components.copy_files_to_session import CopyRawFilesToSessionComponent
-from utils.components.gt_file_validation_component import GTFileValidationComponent
-from utils.components.match_gt_and_raw_component import MatchGTAndRawComponent
+from utils.site_data.arget_singer_24 import ArgetSinger24SiteData
+from pipelines.setup_manager_pipeline import setup_config
+from pipelines.model_manager_pipeline import model_config
+from pipelines.validate_processing_pipeline import validate_config
 
-# Define directory creator component
-directory_setup_config = RunnableComponentConfig(
-    component_class=DirectoryCreator,
-    checkpoint_name="directory_setup",
-    checkpoint_number=1,
-    description="Set up directory structure"
-)
+# Create OCR processor component config
 
-file_validator_config = RunnableComponentConfig(
-    component_class=RawFileValidationComponent,
-    checkpoint_name="file_validation",
-    checkpoint_number=2,
-    description="validate raw files"
-)
 
-copy_raw_files_config = RunnableComponentConfig(
-    component_class=CopyRawFilesToSessionComponent,
-    checkpoint_name="copy_files_to_session",
-    checkpoint_number=3,
-    description="Copy validated files to session"
-)
-copy_gt_files_config = RunnableComponentConfig(
-    component_class=GTFileValidationComponent,
-    checkpoint_name="file_validation",
-    checkpoint_number=4,
-    description="Copy validate_gt_file to session"
-)
 
-match_gt_and_raw_config = RunnableComponentConfig(
-    component_class=MatchGTAndRawComponent,
-    checkpoint_name="match_gt_and_raw",
-    checkpoint_number=5,
-    description="Match GT and raw data folders and flag unmatched"
-)
+# Example pipeline configuration for ValidateProcessingManager
 
-# Define setup manager with its components
-setup_config = RunnableComponentConfig(
-    component_class=SetupManager,
-    checkpoint_name="ckpt1_setup",
-    checkpoint_number=1,
-    description="Initial setup and data validation",
-    metadata={
-        "setup_type": "initial",
-        "requires_validation": True
-    },
-    component_configs=[
-        directory_setup_config,
-        file_validator_config,
-        copy_raw_files_config,
-        copy_gt_files_config,
-        match_gt_and_raw_config
-    ]
-)
+    # Add more components as needed
 
 # Application manager components
-app_manager_components = [setup_config]
+app_manager_components = [setup_config, model_config, validate_config]
 
 def main():
     """
@@ -87,8 +38,8 @@ def main():
     """
     # Configuration
     input_dir = str(Path.cwd() / "input/data")
-    site_data = DMLeafSiteData(collection_date='20241408')  # Use DMLeafSiteData for this example
-    
+    site_data = ArgetSinger24SiteData(collection_date='20241408')  # Using ArgetSinger24 format
+    #site_data = DMLeafSiteData(collection_date='20241408')  # Using DMLeaf format
     # Create application manager
     app_manager = ApplicationManager(
         input_dir=input_dir,
@@ -119,8 +70,10 @@ def main():
             print("\nCreated directories:")
             for name, path in result.get('created_directories', {}).items():
                 print(f"  - {name}: {path}")
-                
-        print("\nProcessing complete.")
+        
+
+
+        # Run model processing
         
     except Exception as e:
         print(f"\nError in pipeline execution: {str(e)}")

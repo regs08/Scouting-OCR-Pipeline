@@ -1,6 +1,7 @@
 from .site_data_base import SiteDataBase
 from typing import List, Optional
 from datetime import datetime
+import re
 
 class ArgetSinger24SiteData(SiteDataBase):
     """Site data configuration for Arget Singer 2024 format."""
@@ -24,11 +25,12 @@ class ArgetSinger24SiteData(SiteDataBase):
         super().__init__(
             data_cols=data_cols,
             index_cols=index_cols,
-            site_name="arget_singer_2024",
-            site_code="AS24",
-            location_pattern=r'R(\d+)P(\d+)',  # Standard R#P# pattern
-            supported_extensions=['.png', '.jpg', '.jpeg', '.pdf'],
-            collection_date=collection_date
+            site_name="arget_singer",
+            site_code="AS",
+            location_pattern=r'R\d+P\d+_R\d+P\d+',  # Pattern for full location string
+            supported_extensions=['.png', '.jpg', '.jpeg', '.pdf', '.csv'],
+            collection_date=collection_date,
+            file_pattern=r'^(AS)_(\d{8})_(.+?)$'  # Pattern for entire filename
         )
     
     def get_data_column_indices(self) -> List[int]:
@@ -48,4 +50,19 @@ class ArgetSinger24SiteData(SiteDataBase):
             List of column indices for date, row, and panel
         """
         return [i for i, col in enumerate(self.index_cols)]
+    
+    def extract_location_info(self, location_str: str) -> tuple:
+        """
+        Extract row and panel from the first location in R#P#_R#P# format
+        """
+        if not location_str:
+            return None, None, None
+            
+        # Extract first R#P# from R#P#_R#P#
+        match = re.match(r'R(\d+)P(\d+)', location_str)
+        if match:
+            row = int(match.group(1))
+            panel = int(match.group(2))
+            return row, panel, location_str
+        return None, None, None
     

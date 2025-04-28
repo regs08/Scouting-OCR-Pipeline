@@ -18,7 +18,9 @@ class GTFileSiteData(SiteDataBase):
             site_name = getattr(site_data, 'site_name', 'gt_site') + '_gt'
             site_code = getattr(site_data, 'site_code', site_code)
             location_pattern = getattr(site_data, 'location_pattern', r'.*')
-            supported_extensions = getattr(site_data, 'supported_extensions', ['.csv'])
+            # Ensure .csv is included in supported extensions
+            base_extensions = getattr(site_data, 'supported_extensions', [])
+            supported_extensions = list(set(base_extensions + ['.csv']))
             collection_date = getattr(site_data, 'collection_date', collection_date)
         else:
             data_cols: List[str] = []
