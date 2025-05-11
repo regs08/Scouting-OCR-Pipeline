@@ -120,14 +120,29 @@ class SiteDataBase:
         location_id = location_part
         
         # First try the site-specific location pattern
-        try:
-            pattern_match = re.search(self.location_pattern, location_part)
-            if pattern_match and len(pattern_match.groups()) >= 2:
-                row = int(pattern_match.group(1))
-                panel = int(pattern_match.group(2))
-                return row, panel, location_id
-        except (ValueError, IndexError):
-            pass
+        pattern_match = re.search(self.location_pattern, location_part)
+        if pattern_match:
+            try:
+                # For R#T#_R#T# pattern, we have 4 groups
+                if len(pattern_match.groups()) == 4:
+                    # Use the first R#T# pair for row and panel
+                    row = int(pattern_match.group(1))  # First R number
+                    panel = int(pattern_match.group(2))  # First T number
+                    return row, panel, location_id
+                # For patterns like ([TNF])(\d+), the first group is the letter and second is the number
+                elif len(pattern_match.groups()) == 2:
+                    letter = pattern_match.group(1)
+                    number = int(pattern_match.group(2))
+                    # For single letter + number patterns, use the number as both row and panel
+                    row = number
+                    panel = number
+                    return row, panel, location_id
+                else:
+                    row = int(pattern_match.group(1))
+                    panel = int(pattern_match.group(2))
+                    return row, panel, location_id
+            except (ValueError, IndexError):
+                pass
             
         # Try common patterns if site-specific pattern didn't match
         patterns = [

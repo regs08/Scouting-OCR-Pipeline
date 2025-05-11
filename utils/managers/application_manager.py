@@ -25,22 +25,25 @@ class ApplicationManager(PipelineComponent):
                  enable_logging: bool = True,
                  enable_console: bool = True,
                  log_dir: Optional[Union[str, Path]] = None,
+                 gt_dir: Optional[Union[str, Path]] = None,
                  **kwargs: Any):
         """
         Initialize the application manager.
         
         Args:
-            input_dir: Directory containing input data and ground truth
+            input_dir: Directory containing input data
             site_data: Site data configuration class
             component_configs: List of manager components (setup, session, etc.)
             verbose: Whether to show detailed output
             enable_logging: Whether to enable logging to file
             enable_console: Whether to enable console output
             log_dir: Directory where log files will be stored
+            gt_dir: Directory containing ground truth files
             **kwargs: Additional keyword arguments for components
         """
         self.input_dir = Path(input_dir)
         self.site_data = site_data
+        self.gt_dir = Path(gt_dir) if gt_dir else None
         
         # Create session ID
         self.session_id = kwargs.get('session_id', datetime.now().strftime("%Y%m%d_%H%M%S"))
@@ -77,12 +80,16 @@ class ApplicationManager(PipelineComponent):
         Returns:
             Dict with application context
         """
+        # Get path manager from input data if it exists
+        self.path_manager = input_data.get('path_manager')
+        
         return {
             **input_data,
             'input_dir': str(self.input_dir),
             'site_data': self.site_data,
             'session_id': self.session_id,
-            'gt_dir': os.path.join(self.input_dir, 'ground_truth')
+            'gt_dir': str(self.gt_dir) if self.gt_dir else None,
+            'path_manager': self.path_manager  # Ensure path manager is passed through
         }
 
     def process_after_pipeline(self, pipeline_output: Dict[str, Any]) -> Dict[str, Any]:

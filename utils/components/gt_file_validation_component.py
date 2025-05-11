@@ -44,7 +44,6 @@ class GTFileValidationComponent(PipelineComponent):
         if not self.gt_input_dir.exists():
             raise ValueError(f"GT input directory does not exist: {self.gt_input_dir}")
         # Get GTFileSiteData from input_data['site_data']
-        from utils.site_data.gt_file_site_data import GTFileSiteData
         site_data = GTFileSiteData(input_data.get('site_data'))
         self.gt_site_data = site_data
         self.file_validator = FileValidator(site_data=self.gt_site_data, logger=self.logger)

@@ -37,6 +37,7 @@ class ModelManager(PipelineComponent):
         self.session_id = kwargs.get('session_id')
         self.path_manager = path_manager
         self.site_data = site_data
+        self.component_configs = component_configs  # Store component_configs as instance variable
         super().__init__(
             verbose=verbose,
             enable_logging=enable_logging,
@@ -71,17 +72,28 @@ class ModelManager(PipelineComponent):
             if not session_paths[dir_name].exists():
                 raise ValueError(f"Required directory does not exist: {session_paths[dir_name]}")
 
+        # Get model_id from component configs metadata
+        model_id = None
+        if self.component_configs:
+            for config in self.component_configs:
+                if hasattr(config, 'metadata') and config.metadata:
+                    model_id = config.metadata.get('model_id')
+                    if model_id:
+                        break
+
         pipeline_data = {
             **input_data,
             'path_manager': self.path_manager,
             'site_data': self.site_data,
             'session_id': self.session_id,
-            'session_paths': session_paths
+            'session_paths': session_paths,
+            'model_id': model_id  # Use the model_id from component configs
         }
 
         self.log_info("process_before_pipeline", "Model pipeline preparation complete", {
             'session_id': self.session_id,
-            'directories': list(session_paths.keys())
+            'directories': list(session_paths.keys()),
+            'model_id': model_id
         })
 
         return pipeline_data

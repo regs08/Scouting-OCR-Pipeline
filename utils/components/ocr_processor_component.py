@@ -22,6 +22,13 @@ class OCRProcessorComponent(PipelineComponent):
         )
         self.supported_formats = {'.png', '.jpg', '.jpeg', '.pdf', '.tiff', '.tif'}
         self.path_manager = kwargs.get('path_manager')
+        self.model_id = kwargs.get('model_id', "5sbootstrappedTemplate2")
+        
+        # Log the model ID being used
+        self.log_info("__init__", f"Initializing OCR processor with model ID: {self.model_id}", {
+            'model_id': self.model_id,
+            'endpoint': AZURE_FORM_RECOGNIZER_ENDPOINT
+        })
 
     def process_before_pipeline(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         self.path_manager = input_data.get('path_manager')
@@ -53,9 +60,15 @@ class OCRProcessorComponent(PipelineComponent):
             if file_path.suffix.lower() not in self.supported_formats:
                 raise ValueError(f"Unsupported file format: {file_path.suffix}")
 
-            # Process with Form Recognizer
+            # Log before processing
+            self.log_info("process_file", f"Processing file with model ID: {self.model_id}", {
+                'file': str(file_path),
+                'model_id': self.model_id
+            })
+
+            # Process with Form Recognizer using specified model
             with open(file_path, "rb") as file:
-                poller = self.client.begin_analyze_document("prebuilt-layout", document=file)
+                poller = self.client.begin_analyze_document(self.model_id, document=file)
                 result = poller.result()
 
             tables_processed = []
@@ -122,7 +135,7 @@ class OCRProcessorComponent(PipelineComponent):
                 'output_dir': str(self.output_dir),
                 'error_dir': str(self.error_dir)
             },
-            'ocr_output_dir': str(self.output_dir)
+            'compare_dir': str(self.output_dir)  # Use the OCR output directory as the compare directory
         }
         
         return output 

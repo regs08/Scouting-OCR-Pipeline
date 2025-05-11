@@ -17,7 +17,7 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from utils.file_validator import FileValidator
-from utils.site_data.dm_leaf_site_data import DMLeafSiteData
+from utils.site_data.arget_singer_24 import ArgetSinger24SiteData
 
 
 def create_test_files(directory: Path) -> None:
@@ -33,7 +33,10 @@ def create_test_files(directory: Path) -> None:
     valid_files = [
         "DML_20242408_R1T2.jpg",
         "DML_20242408_R5T10.jpg",
-        "DML_20242408_R1T2_extra_info.jpg"
+        "DML_20242408_R1T2_extra_info.jpg",
+        "AS_20242408_R10P14_R10P22.jpg",  # New format test
+        "AS_20242408_R5P3_R5P4.jpg",      # New format test
+        "AS_20242408_R1P1_R1P2.jpg"       # New format test
     ]
     
     # Invalid files - wrong format
@@ -45,7 +48,10 @@ def create_test_files(directory: Path) -> None:
         "DML_20242408_R1.jpg",     # Incomplete location
         "DML_20242408_T2.jpg",     # Incomplete location
         "wrong_format.jpg",        # Completely wrong format
-        "DML_20242408_R1T2.txt"    # Unsupported extension
+        "DML_20242408_R1T2.txt",   # Unsupported extension
+        "AS_20242408_R1P1.jpg",    # Incomplete R##P## format
+        "AS_20242408_R1P1_R1.jpg", # Incomplete second R##P## format
+        "AS_20242408_R1_R1P1.jpg"  # Incomplete first R##P## format
     ]
     
     # Create directory
@@ -84,7 +90,7 @@ def main():
     create_test_files(test_dir)
     
     # Create site data and validator
-    site_data = DMLeafSiteData(collection_date="20242408")
+    site_data = ArgetSinger24SiteData(collection_date="20242408")
     validator = FileValidator(site_data, logger=logger)
     
     # Print file pattern information

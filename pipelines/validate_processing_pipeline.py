@@ -8,7 +8,6 @@ match_gt_and_file_config = RunnableComponentConfig(
     checkpoint_name="ckpt1_match_gt_and_processed",
     checkpoint_number=1,
     description="Match GT files to processed files and move unmatched to flagged/unmatched directory",
-    metadata={'compare_dir_key': 'processed/checkpoints/ckpt1_ocr_processed'}
 )
 
 copy_validted_files_config = RunnableComponentConfig(
@@ -18,6 +17,14 @@ copy_validted_files_config = RunnableComponentConfig(
     description="Load matched GT and processed CSVs as DataFrames"
 )
 
+match_validated_files_config = RunnableComponentConfig(
+    component_class=MatchGTAndFileComponent,
+    checkpoint_name="ckpt3_match_validated",
+    checkpoint_number=3,
+    description="Match GT files with validated files",
+    metadata={'compare_dir_key': 'processed/checkpoints/ckpt2_validation'}
+)
+
 validate_config = RunnableComponentConfig(
     component_class=ValidateProcessingManager,
     checkpoint_name="ckpt3_validate_processing",
@@ -25,6 +32,7 @@ validate_config = RunnableComponentConfig(
     description="Validate the processing of the files",
     component_configs=[
         match_gt_and_file_config,
-        copy_validted_files_config
+        copy_validted_files_config,
+        match_validated_files_config
     ]
 )

@@ -61,7 +61,6 @@ class DirectoryCreator(PipelineComponent):
         prepared_data = self.process_before_pipeline(input_data)
         
         # Extract site code or use default
-        site_code = getattr(self.site_data, 'site_code', 'default')
         
         # Get or create session ID (timestamp)
         session_id = self.session_id

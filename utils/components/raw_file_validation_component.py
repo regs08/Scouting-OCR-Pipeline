@@ -134,30 +134,3 @@ class RawFileValidationComponent(PipelineComponent):
         output['valid_files'] = valid_files
         
         return output
-    
-    def run(self, input_data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """
-        Run the file validation component.
-        
-        Args:
-            input_data: Input data including input_dir and site_data
-            
-        Returns:
-            Dict with validation results
-        """
-        input_data = input_data or {}
-        
-        try:
-            # Prepare data
-            prepared_data = self.process_before_pipeline(input_data)
-            
-            # Skip pipeline execution (we don't have child components)
-            
-            # Process results
-            results = self.process_after_pipeline(prepared_data)
-            
-            return results
-            
-        except Exception as e:
-            self.log_error("run", f"File validation failed: {str(e)}")
-            raise 

@@ -63,25 +63,92 @@ class ValidateProcessingManager(PipelineComponent):
             raise ValueError("path_manager and session_id are required in input_data")
         session_paths = self.path_manager.get_session_paths(self.session_id)
 
+        # Get matched files from input data or initialize empty list
+        self.matched_files = input_data.get('matched_files', [])
+        
+        # Log matched files status
+        if not self.matched_files:
+            self.log_warning("process_before_pipeline", "No matched files received in input data", {
+                'input_data_keys': list(input_data.keys()),
+                'session_id': self.session_id
+            })
+        else:
+            self.log_info("process_before_pipeline", "Received matched files", {
+                'num_matched_files': len(self.matched_files),
+                'first_file': str(self.matched_files[0].gt_path) if self.matched_files else None,
+                'last_file': str(self.matched_files[-1].gt_path) if self.matched_files else None
+            })
+        
+        # Create validation directory if it doesn't exist
+        validation_dir = session_paths['processed'] / 'validation'
+        validation_dir.mkdir(parents=True, exist_ok=True)
+
         # Pass all context through for downstream components
         pipeline_data = {
             **input_data,
             'path_manager': self.path_manager,
             'site_data': self.site_data,
             'session_id': self.session_id,
-            'session_paths': session_paths
+            'session_paths': session_paths,
+            'matched_files': self.matched_files,
+            'validation_dir': validation_dir
         }
+        
+        self.log_info("process_before_pipeline", "Validation processing context prepared", {
+            'num_matched_files': len(self.matched_files),
+            'validation_dir': str(validation_dir)
+        })
+        
         return pipeline_data
 
     def process_after_pipeline(self, pipeline_output: Dict[str, Any]) -> Dict[str, Any]:
         """
         Add processing metadata and log completion.
         """
+        # Log all keys in pipeline output first
+        self.log_info("process_after_pipeline", "Pipeline output keys", {
+            'output_keys': list(pipeline_output.keys()),
+            'session_id': self.session_id
+        })
+        
+        # Get updated matched files from pipeline output
+        matched_files = pipeline_output.get('matched_files', self.matched_files)
+        
+        # Log detailed matched files information
+        if matched_files:
+            self.log_info("process_after_pipeline", "Matched files details", {
+                'num_matched_files': len(matched_files),
+                'type': str(type(matched_files)),
+                'first_file_type': str(type(matched_files[0])),
+                'first_file_attrs': dir(matched_files[0]),
+                'first_file_gt_path': str(matched_files[0].gt_path),
+                'first_file_pred_path': str(matched_files[0].pred_path),
+                'first_file_normalized_name': matched_files[0].normalized_name
+            })
+        
+        # Log matched files status after pipeline
+        if not matched_files:
+            self.log_warning("process_after_pipeline", "No matched files in pipeline output", {
+                'pipeline_output_keys': list(pipeline_output.keys()),
+                'session_id': self.session_id
+            })
+        else:
+            self.log_info("process_after_pipeline", "Pipeline output contains matched files", {
+                'num_matched_files': len(matched_files),
+                'first_file': str(matched_files[0].gt_path) if matched_files else None,
+                'last_file': str(matched_files[-1].gt_path) if matched_files else None
+            })
+        
+        self.log_info("process_after_pipeline", "Validation processing completed", {
+            'num_matched_files': len(matched_files),
+            'validation_completed': True
+        })
+        
         return {
             **pipeline_output,
             'validation_processing_completed': True,
             'session_id': self.session_id,
-            'path_manager': self.path_manager
+            'matched_files': matched_files  # Ensure matched files are passed through
         }
 
 

@@ -66,23 +66,24 @@ class SetupManager(PipelineComponent):
         # Initialize path_manager if needed (using current date or a default)
         if not self.path_manager:
             site_code = getattr(self.site_data, 'site_code', 'default')
-            batch = self.site_data.collection_date 
+            batch = getattr(self.site_data, 'collection_date', datetime.now().strftime("%Y%m%d"))
             self.path_manager = PathManager(
                 expected_site_code=site_code,
                 batch=batch
             )
+            self.log_info("process_before_pipeline", "Created new path manager", {
+                "site_code": site_code,
+                "batch": batch
+            })
+
+        # Always ensure path_manager is in input_data
+        input_data['path_manager'] = self.path_manager
 
         self.log_info("process_before_pipeline", "Setup manager configured", {
             "input_dir": str(self.input_dir),
             "site_data": self.site_data.__class__.__name__,
             "path_manager.batch": self.path_manager.batch
         })
-
-        if 'path_manager' not in input_data:
-            input_data['path_manager'] = self.path_manager
-        # Pass gt_dir through if present
-        if 'gt_dir' in input_data:
-            input_data['gt_dir'] = input_data['gt_dir']
 
         return input_data
 

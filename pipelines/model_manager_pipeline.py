@@ -6,7 +6,8 @@ ocr_processor_config = RunnableComponentConfig(
         component_class=OCRProcessorComponent,
         checkpoint_name="ckpt1_ocr_processed",
         checkpoint_number=1,
-        description="Process files with OCR"
+        description="Process files with OCR",
+        metadata={"model_id": "5sbootstrappedTemplate2"}
     )
 
 model_config = RunnableComponentConfig(
